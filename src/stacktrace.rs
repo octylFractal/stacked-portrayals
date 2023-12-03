@@ -52,7 +52,7 @@ pub struct Frame {
     pub class: String,
     pub method: String,
     pub file: String,
-    pub line: u32,
+    pub line: Option<u32>,
 }
 
 impl Display for Frame {
@@ -60,11 +60,11 @@ impl Display for Frame {
         if let Some(module) = &self.module {
             write!(f, "{}/", module)?;
         }
-        write!(
-            f,
-            "{}.{}({}:{})",
-            self.class, self.method, self.file, self.line
-        )
+        write!(f, "{}.{}({}", self.class, self.method, self.file)?;
+        if let Some(line) = self.line {
+            write!(f, ":{}", line)?;
+        }
+        write!(f, ")")
     }
 }
 
@@ -148,9 +148,19 @@ fn frame() -> impl CharParser<Frame> {
             // jtype is basically good for this too
             jtype()
                 .labelled("file")
-                .then_ignore(just(":"))
-                .then(u32_digits().labelled("line number"))
+                .then(
+                    just(":")
+                        .ignore_then(u32_digits().labelled("line number"))
+                        .or_not(),
+                )
                 .delimited_by(just("("), just(")")),
+        )
+        .then_ignore(
+            just("]")
+                .not()
+                .repeated()
+                .delimited_by(just(" ~["), just("]"))
+                .or_not(),
         )
         .then_ignore(eol())
         .map(|((module, (class, method)), (file, line))| Frame {
